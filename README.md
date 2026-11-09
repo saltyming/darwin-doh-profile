@@ -62,7 +62,12 @@ Supported advanced keys:
 - `ServerAddresses`: optional resolver IP address strings.
 - `SupplementalMatchDomains`: optional domain strings. When present, DNS
   settings apply only to matching domains; leave it unset for full-device DNS.
+- `--exclude-domains`: optional domain strings that never use this resolver.
+  The profile gets one `OnDemandRules` entry (`EvaluateConnection` with
+  `NeverConnect` for these domains), so queries for them go to the system's
+  other resolvers, such as a VPN's, while every other name still uses DoH.
 - `ProhibitDisablement`: prevents disabling DNS settings on supervised devices.
+  It is a key of the payload itself, beside `DNSSettings`.
 - `PayloadCertificateUUID`: references an identity certificate payload. Only set
   this when that certificate payload is available in the same deployment context.
 

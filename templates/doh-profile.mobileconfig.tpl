@@ -11,7 +11,7 @@
 				<string>HTTPS</string>
 				<key>ServerURL</key>
 				<string>__SERVER_URL__</string>__OPTIONAL_DNS_SETTINGS__
-			</dict>
+			</dict>__OPTIONAL_PAYLOAD_SETTINGS__
 			<key>PayloadDescription</key>
 			<string>Configures encrypted DNS over HTTPS.</string>
 			<key>PayloadDisplayName</key>

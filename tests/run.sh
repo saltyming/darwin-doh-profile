@@ -79,7 +79,7 @@ run_advanced_options_test() {
 	assert_eq "2001:db8::53" "$(extract_raw PayloadContent.0.DNSSettings.ServerAddresses.1 "$profile")" "second ServerAddresses entry"
 	assert_eq "example.com" "$(extract_raw PayloadContent.0.DNSSettings.SupplementalMatchDomains.0 "$profile")" "first SupplementalMatchDomains entry"
 	assert_eq "*.corp.example.com" "$(extract_raw PayloadContent.0.DNSSettings.SupplementalMatchDomains.1 "$profile")" "second SupplementalMatchDomains entry"
-	assert_eq "false" "$(extract_raw PayloadContent.0.DNSSettings.ProhibitDisablement "$profile")" "ProhibitDisablement"
+	assert_eq "false" "$(extract_raw PayloadContent.0.ProhibitDisablement "$profile")" "ProhibitDisablement"
 	assert_eq "$cert_uuid" "$(extract_raw PayloadContent.0.DNSSettings.PayloadCertificateUUID "$profile")" "PayloadCertificateUUID"
 }
 
@@ -96,6 +96,7 @@ run_interactive_generation_test() {
 		"y" \
 		"true" \
 		"192.0.2.54" \
+		"" \
 		"" \
 		"omit" \
 		"" \

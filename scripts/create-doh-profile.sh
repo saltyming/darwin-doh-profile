@@ -18,6 +18,7 @@ ALLOW_FAILOVER="omit"
 PROHIBIT_DISABLEMENT="omit"
 SERVER_ADDRESSES=""
 MATCH_DOMAINS=""
+EXCLUDE_DOMAINS=""
 PAYLOAD_CERTIFICATE_UUID=""
 
 usage() {
@@ -42,6 +43,8 @@ Advanced DNSSettings options:
   --allow-failover true|false|omit
   --server-addresses CSV       Optional resolver IP address strings
   --match-domains CSV          Optional domains; if set, DNS applies only to matching domains
+  --exclude-domains CSV        Optional domains that never use this resolver; the system
+                               resolver answers them (OnDemandRules, NeverConnect)
   --prohibit-disablement true|false|omit
   --payload-certificate-uuid UUID
 
@@ -236,6 +239,7 @@ while [ "$#" -gt 0 ]; do
 		--allow-failover) ALLOW_FAILOVER="${2:-}"; shift 2 ;;
 		--server-addresses) SERVER_ADDRESSES="${2:-}"; shift 2 ;;
 		--match-domains) MATCH_DOMAINS="${2:-}"; shift 2 ;;
+		--exclude-domains) EXCLUDE_DOMAINS="${2:-}"; shift 2 ;;
 		--prohibit-disablement) PROHIBIT_DISABLEMENT="${2:-}"; shift 2 ;;
 		--payload-certificate-uuid) PAYLOAD_CERTIFICATE_UUID="${2:-}"; shift 2 ;;
 		*) die "unknown option: $1" ;;
@@ -261,6 +265,7 @@ if [ "$NON_INTERACTIVE" -eq 0 ]; then
 		ALLOW_FAILOVER=$(prompt "AllowFailover (true/false/omit)" "$ALLOW_FAILOVER")
 		SERVER_ADDRESSES=$(prompt "ServerAddresses, comma separated IPs (blank to omit)" "$SERVER_ADDRESSES")
 		MATCH_DOMAINS=$(prompt "SupplementalMatchDomains, comma separated domains (blank for all domains)" "$MATCH_DOMAINS")
+		EXCLUDE_DOMAINS=$(prompt "Domains that never use this resolver, comma separated (blank to omit)" "$EXCLUDE_DOMAINS")
 		PROHIBIT_DISABLEMENT=$(prompt "ProhibitDisablement (true/false/omit)" "$PROHIBIT_DISABLEMENT")
 		PAYLOAD_CERTIFICATE_UUID=$(prompt "PayloadCertificateUUID (blank to omit)" "$PAYLOAD_CERTIFICATE_UUID")
 	fi
@@ -329,16 +334,54 @@ if [ -n "$MATCH_DOMAINS" ]; then
 				</array>"
 fi
 
-if [ "$PROHIBIT_DISABLEMENT" != "omit" ]; then
-	optional_dns_settings="${optional_dns_settings}
-				<key>ProhibitDisablement</key>
-				<$PROHIBIT_DISABLEMENT/>"
-fi
-
 if [ -n "$PAYLOAD_CERTIFICATE_UUID" ]; then
 	optional_dns_settings="${optional_dns_settings}
 				<key>PayloadCertificateUUID</key>
 				<string>$(xml_escape "$PAYLOAD_CERTIFICATE_UUID")</string>"
+fi
+
+# OnDemandRules and ProhibitDisablement are keys of the DNS Settings payload, beside
+# DNSSettings, not inside it. One EvaluateConnection rule with no network match applies
+# the resolver everywhere, except for the listed domains, which go to the system's
+# other resolvers.
+optional_payload_settings=""
+if [ -n "$EXCLUDE_DOMAINS" ]; then
+	optional_payload_settings="
+			<key>OnDemandRules</key>
+			<array>
+				<dict>
+					<key>Action</key>
+					<string>EvaluateConnection</string>
+					<key>ActionParameters</key>
+					<array>
+						<dict>
+							<key>DomainAction</key>
+							<string>NeverConnect</string>
+							<key>Domains</key>
+							<array>"
+	old_ifs="$IFS"
+	IFS=,
+	for raw_entry in $EXCLUDE_DOMAINS; do
+		IFS="$old_ifs"
+		entry=$(trim "$raw_entry")
+		validate_domain "$entry"
+		optional_payload_settings="${optional_payload_settings}
+								<string>$(xml_escape "$entry")</string>"
+		IFS=,
+	done
+	IFS="$old_ifs"
+	optional_payload_settings="${optional_payload_settings}
+							</array>
+						</dict>
+					</array>
+				</dict>
+			</array>"
+fi
+
+if [ "$PROHIBIT_DISABLEMENT" != "omit" ]; then
+	optional_payload_settings="${optional_payload_settings}
+			<key>ProhibitDisablement</key>
+			<$PROHIBIT_DISABLEMENT/>"
 fi
 
 profile_uuid=$(uuidgen)
@@ -352,8 +395,15 @@ signed_path="$OUTPUT_DIR/$safe_name.signed.mobileconfig"
 mkdir -p "$OUTPUT_DIR"
 
 content=$(cat "$TEMPLATE_PATH")
+if [ -n "$optional_payload_settings" ]; then
+	case "$content" in
+		*__OPTIONAL_PAYLOAD_SETTINGS__*) ;;
+		*) die "template has no __OPTIONAL_PAYLOAD_SETTINGS__ placeholder for --exclude-domains: $TEMPLATE_PATH" ;;
+	esac
+fi
 content=${content//__SERVER_URL__/$(xml_escape "$SERVER_URL")}
 content=${content//__OPTIONAL_DNS_SETTINGS__/$optional_dns_settings}
+content=${content//__OPTIONAL_PAYLOAD_SETTINGS__/$optional_payload_settings}
 content=${content//__PAYLOAD_DISPLAY_NAME__/$(xml_escape "$PROFILE_NAME")}
 content=${content//__PAYLOAD_IDENTIFIER__/$(xml_escape "$payload_identifier")}
 content=${content//__PAYLOAD_UUID__/$payload_uuid}
